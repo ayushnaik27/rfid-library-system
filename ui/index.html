@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RFID Library Kiosk</title>
+
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: #121a2b;
+            --panel-2: #172033;
+            --border: #26334c;
+            --text: #f7f9fc;
+            --muted: #9caec7;
+            --accent: #2dd4bf;
+            --accent-strong: #14b8a6;
+            --warning: #f59e0b;
+            --danger: #fb7185;
+            --success: #34d399;
+            --shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Segoe UI", Arial, sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(45, 212, 191, 0.14), transparent 34rem),
+                linear-gradient(135deg, #080d19, var(--bg) 52%, #111827);
+            color: var(--text);
+        }
+
+        .kiosk-shell {
+            width: min(1120px, 100%);
+            min-height: 100vh;
+            margin: 0 auto;
+            padding: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .screen {
+            display: none;
+            width: min(920px, 100%);
+            min-height: min(680px, calc(100vh - 56px));
+            background: rgba(18, 26, 43, 0.94);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            animation: screenIn 180ms ease-out;
+        }
+
+        .screen.active {
+            display: grid;
+            grid-template-rows: auto 1fr;
+        }
+
+        .topbar {
+            padding: 22px 26px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            background: rgba(11, 16, 32, 0.52);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 700;
+            letter-spacing: 0;
+        }
+
+        .brand-mark {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            color: #051414;
+            background: var(--accent);
+            font-weight: 900;
+        }
+
+        .status-pill {
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 8px 12px;
+            color: var(--muted);
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .content {
+            padding: 34px;
+            display: grid;
+            align-content: center;
+            gap: 24px;
+        }
+
+        .content.split {
+            grid-template-columns: minmax(0, 1fr) minmax(280px, 0.8fr);
+            align-items: start;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(34px, 5vw, 58px);
+            line-height: 1.02;
+            letter-spacing: 0;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: 24px;
+            letter-spacing: 0;
+        }
+
+        p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 17px;
+            line-height: 1.55;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+            align-items: stretch;
+        }
+
+        input {
+            width: 100%;
+            min-height: 56px;
+            padding: 0 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #0c1322;
+            color: var(--text);
+            font-size: 18px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.16);
+        }
+
+        button {
+            min-height: 56px;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            padding: 0 22px;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text);
+            cursor: pointer;
+            transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+            touch-action: manipulation;
+            white-space: nowrap;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .primary {
+            background: var(--accent-strong);
+            color: #041312;
+        }
+
+        .secondary {
+            background: #1f2a3e;
+            border-color: var(--border);
+        }
+
+        .danger {
+            background: rgba(251, 113, 133, 0.14);
+            border-color: rgba(251, 113, 133, 0.42);
+            color: #fecdd3;
+        }
+
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .metric,
+        .panel {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 18px;
+        }
+
+        .patron-summary {
+            display: none;
+            background: linear-gradient(135deg, rgba(45, 212, 191, 0.12), rgba(23, 32, 51, 0.95));
+            border: 1px solid rgba(45, 212, 191, 0.32);
+            border-radius: 8px;
+            padding: 18px;
+            margin-bottom: 16px;
+        }
+
+        .patron-summary.show {
+            display: block;
+        }
+
+        .patron-summary h2 {
+            font-size: 28px;
+        }
+
+        .patron-details {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        .patron-detail {
+            background: rgba(12, 19, 34, 0.64);
+            border: 1px solid rgba(38, 51, 76, 0.8);
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .patron-detail strong {
+            display: block;
+            font-size: 20px;
+            color: var(--text);
+            line-height: 1.2;
+        }
+
+        .patron-detail span {
+            display: block;
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .metric strong {
+            display: block;
+            font-size: 38px;
+            line-height: 1;
+            color: var(--text);
+        }
+
+        .metric span,
+        .small-label {
+            display: block;
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .alert {
+            display: none;
+            border-radius: 8px;
+            padding: 14px 16px;
+            line-height: 1.45;
+            border: 1px solid rgba(245, 158, 11, 0.38);
+            background: rgba(245, 158, 11, 0.12);
+            color: #fde68a;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert.error {
+            border-color: rgba(251, 113, 133, 0.42);
+            background: rgba(251, 113, 133, 0.12);
+            color: #fecdd3;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .scan-list,
+        .loan-list {
+            display: grid;
+            gap: 10px;
+            max-height: 300px;
+            overflow: auto;
+            padding-right: 4px;
+        }
+
+        .book {
+            min-height: 58px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 13px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #101827;
+            animation: itemIn 160ms ease-out;
+        }
+
+        .book.removing {
+            animation: itemOut 160ms ease-in forwards;
+        }
+
+        .book-body {
+            min-width: 0;
+        }
+
+        .book strong {
+            display: block;
+            font-size: 16px;
+            line-height: 1.25;
+        }
+
+        .book span {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .book.warning {
+            border-color: rgba(245, 158, 11, 0.45);
+            background: rgba(245, 158, 11, 0.12);
+        }
+
+        .book.error {
+            border-color: rgba(217, 70, 239, 0.5);
+            background: rgba(88, 28, 135, 0.38);
+        }
+
+        .book.marked {
+            border-color: rgba(52, 211, 153, 0.46);
+            background: rgba(52, 211, 153, 0.12);
+        }
+
+        .book-actions {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tag {
+            flex: 0 0 auto;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 800;
+            color: #061817;
+            background: var(--accent);
+        }
+
+        .tag.blocked {
+            color: #fff7ed;
+            background: #be185d;
+        }
+
+        .remove-scan {
+            min-height: 34px;
+            padding: 0 12px;
+            border-color: rgba(251, 113, 133, 0.46);
+            background: rgba(251, 113, 133, 0.14);
+            color: #fecdd3;
+            font-size: 13px;
+        }
+
+        .empty-state {
+            border: 1px dashed var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            color: var(--muted);
+            text-align: center;
+        }
+
+        .success-mark {
+            width: 76px;
+            height: 76px;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            background: rgba(52, 211, 153, 0.14);
+            border: 1px solid rgba(52, 211, 153, 0.4);
+            color: var(--success);
+            font-size: 40px;
+            font-weight: 900;
+        }
+
+        @keyframes screenIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes itemIn {
+            from {
+                opacity: 0;
+                transform: scale(0.98);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        @keyframes itemOut {
+            to {
+                opacity: 0;
+                transform: translateX(-12px) scale(0.98);
+                max-height: 0;
+                margin: 0;
+                padding-top: 0;
+                padding-bottom: 0;
+            }
+        }
+
+        @media (max-width: 760px) {
+            .kiosk-shell {
+                padding: 14px;
+            }
+
+            .screen {
+                min-height: calc(100vh - 28px);
+            }
+
+            .topbar {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .content,
+            .content.split {
+                grid-template-columns: 1fr;
+                padding: 22px;
+            }
+
+            .input-row,
+            .button-grid,
+            .metric-grid,
+            .patron-details {
+                grid-template-columns: 1fr;
+                display: grid;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="kiosk-shell">
+        <section id="idle" class="screen">
+            <div class="topbar">
+                <div class="brand">
+                    <div class="brand-mark">RF</div>
+                    <div>Smart Library Kiosk</div>
+                </div>
+                <div class="status-pill">Reader ready</div>
+            </div>
+
+            <div class="content">
+                <div>
+                    <h1>Choose circulation mode</h1>
+                    <p>Select the transaction you want to perform.</p>
+                </div>
+
+                <div class="button-grid">
+                    <button class="primary" onclick="beginIssueFlow()">Issue Books</button>
+                    <button class="secondary" onclick="beginReturnFlow()">Return Books</button>
+                </div>
+
+                <div id="idleAlert" class="alert error"></div>
+            </div>
+        </section>
+
+        <section id="userScan" class="screen">
+            <div class="topbar">
+                <div class="brand">
+                    <div class="brand-mark">RF</div>
+                    <div>Issue Books</div>
+                </div>
+                <button class="secondary" onclick="resetKiosk()">Back</button>
+            </div>
+
+            <div class="content">
+                <div>
+                    <h1>Scan patron card</h1>
+                    <p>Use the RFID card reader or enter a test UID.</p>
+                </div>
+
+                <div class="input-row">
+                    <input id="user_uid" placeholder="Example: UID123" autocomplete="off">
+                    <button class="primary" onclick="startSession()">Scan ID</button>
+                </div>
+
+                <div id="userAlert" class="alert error"></div>
+            </div>
+        </section>
+
+        <section id="dashboard" class="screen">
+            <div class="topbar">
+                <div class="brand">
+                    <div class="brand-mark">RF</div>
+                    <div id="welcomeText">Welcome</div>
+                </div>
+                <button class="secondary" onclick="endSession()">End Session</button>
+            </div>
+
+            <div class="content split">
+                <div>
+                    <div class="metric-grid">
+                        <div class="metric">
+                            <strong id="bookCount">0</strong>
+                            <span>Books currently issued</span>
+                        </div>
+                        <div class="metric">
+                            <strong id="patronId">-</strong>
+                            <span>Patron ID</span>
+                        </div>
+                    </div>
+
+                    <div class="button-grid" style="margin-top: 18px;">
+                        <button class="primary" onclick="goToScan('issue')">Issue Books</button>
+                        <button class="secondary" onclick="goToScan('return')">Return Books</button>
+                    </div>
+                </div>
+
+                <aside class="panel">
+                    <h2>Current loans</h2>
+                    <div id="dashboardLoans" class="loan-list" style="margin-top: 14px;"></div>
+                </aside>
+            </div>
+        </section>
+
+        <section id="scan" class="screen">
+            <div class="topbar">
+                <div class="brand">
+                    <div class="brand-mark">RF</div>
+                    <div id="scanTitle">Scan Books</div>
+                </div>
+                <button class="secondary" onclick="cancelFlow()">Back</button>
+            </div>
+
+            <div class="content split">
+                <div>
+                    <div id="patronSummary" class="patron-summary">
+                        <h2 id="patronWelcome">Welcome</h2>
+                        <div class="patron-details">
+                            <div class="patron-detail">
+                                <strong id="patronSummaryCardId">-</strong>
+                                <span>Card ID</span>
+                            </div>
+                            <div class="patron-detail">
+                                <strong id="patronSummaryBookCount">0</strong>
+                                <span>Books Currently Issued</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="toolbar">
+                        <button id="autoScanBtn" class="primary" onclick="startAutoScan()">Auto Scan</button>
+                        <button class="secondary" onclick="scanOneRandomTag()">Scan Once</button>
+                        <button class="secondary" onclick="stopScan()">Stop</button>
+                    </div>
+
+                    <div class="input-row">
+                        <input id="manual_tag" placeholder="Manual test tag">
+                        <button class="secondary" onclick="scanManualTag()">Add Tag</button>
+                    </div>
+
+                    <div id="scanAlert" class="alert"></div>
+
+                    <div class="panel">
+                        <h2>Detected books</h2>
+                        <div id="book_list" class="scan-list" style="margin-top: 14px;"></div>
+                    </div>
+
+                    <button id="confirmBtn" class="primary" onclick="confirmAction()" disabled>Confirm</button>
+                </div>
+
+                <aside id="returnPanel" class="panel">
+                    <h2>Books available for return</h2>
+                    <div id="returnLoans" class="loan-list" style="margin-top: 14px;"></div>
+                </aside>
+            </div>
+        </section>
+
+        <section id="success" class="screen">
+            <div class="topbar">
+                <div class="brand">
+                    <div class="brand-mark">RF</div>
+                    <div>Transaction complete</div>
+                </div>
+                <div class="status-pill">Returning to start</div>
+            </div>
+
+            <div class="content">
+                <div class="success-mark">✓</div>
+                <div>
+                    <h1>Success</h1>
+                    <p id="successMsg">Transaction completed successfully.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <audio id="beep" src="https://www.soundjay.com/buttons/beep-07.wav"></audio>
+
+    <script>
+        const API_BASE = "http://127.0.0.1:8000";
+        const fakeTags = ["TAG1", "TAG2", "TAG3", "TAG4", "TAG5", "TAG_UNKNOWN"];
+
+        let sessionId = null;
+        let currentUser = null;
+        let currentUserUid = null;
+        let currentBooks = [];
+        let mode = null;
+        let scanInterval = null;
+        let scannedTags = new Set();
+        let operationTags = new Set();
+        let validBooks = [];
+        let invalidBooks = [];
+        let scannerPollTimer = null;
+        let scannerRequestInFlight = false;
+        let rfidLoginInProgress = false;
+
+        function showScreen(id) {
+            document.querySelectorAll(".screen").forEach(screen => {
+                screen.classList.remove("active");
+            });
+            document.getElementById(id).classList.add("active");
+        }
+
+        function isScreenActive(id) {
+            return document.getElementById(id).classList.contains("active");
+        }
+
+        function showAlert(id, message, type = "warning") {
+            const alert = document.getElementById(id);
+            alert.textContent = message;
+            alert.className = `alert ${type === "error" ? "error" : ""} show`;
+        }
+
+        function clearAlert(id) {
+            const alert = document.getElementById(id);
+            alert.textContent = "";
+            alert.className = "alert";
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        async function request(path, options = {}) {
+            const response = await fetch(`${API_BASE}${path}`, {
+                headers: { "Content-Type": "application/json" },
+                ...options
+            });
+            const data = await response.json();
+
+            if (!response.ok || data.success === false) {
+                throw new Error(data.message || data.detail?.message || "Request failed");
+            }
+
+            return data;
+        }
+
+        async function startSession() {
+            const input = document.getElementById("user_uid");
+            const uid = input.value.trim();
+
+            clearAlert("userAlert");
+
+            if (!uid) {
+                showAlert("userAlert", "Please scan a valid library card.", "error");
+                return;
+            }
+
+            try {
+                const data = await request("/start", {
+                    method: "POST",
+                    body: JSON.stringify({ user_uid: uid })
+                });
+
+                sessionId = data.data.session_id;
+                currentUser = data.data.user;
+                currentUserUid = uid;
+
+                await refreshCurrentBooks();
+                stopScannerPolling();
+                goToScan("issue");
+            } catch (error) {
+                showAlert("userAlert", error.message || "User not found.", "error");
+                input.value = "";
+                input.focus();
+            }
+        }
+
+        async function loginWithRfid(uid) {
+            if (rfidLoginInProgress) {
+                return;
+            }
+
+            rfidLoginInProgress = true;
+            clearAlert("userAlert");
+
+            try {
+                const data = await request("/api/rfid/login", {
+                    method: "POST",
+                    body: JSON.stringify({ uid })
+                });
+
+                sessionId = data.data.session_id;
+                currentUser = data.data.user;
+                currentUserUid = uid;
+
+                await refreshCurrentBooks();
+                stopScannerPolling();
+                goToScan("issue");
+            } catch (error) {
+                showAlert("userAlert", error.message || "RFID card not registered", "error");
+            } finally {
+                rfidLoginInProgress = false;
+            }
+        }
+
+        async function handlePatronScan(uid) {
+            const input = document.getElementById("user_uid");
+
+            if (!isScreenActive("userScan")) {
+                return;
+            }
+
+            input.value = uid;
+            await loginWithRfid(uid);
+        }
+
+        function beginIssueFlow() {
+            sessionId = null;
+            currentUser = null;
+            currentUserUid = null;
+            currentBooks = [];
+            clearAlert("userAlert");
+            document.getElementById("user_uid").value = "";
+            showScreen("userScan");
+            startScannerPolling();
+            document.getElementById("user_uid").focus();
+        }
+
+        function beginReturnFlow() {
+            sessionId = null;
+            currentUser = null;
+            currentUserUid = null;
+            currentBooks = [];
+            goToScan("return");
+        }
+
+        async function refreshCurrentBooks() {
+            const data = await request(`/users/${currentUser.koha_id}/current-books`);
+            currentBooks = data.data.books || [];
+        }
+
+        function renderDashboard() {
+            document.getElementById("welcomeText").textContent = `Welcome, ${currentUser.name}`;
+            document.getElementById("patronId").textContent = currentUser.koha_id;
+            document.getElementById("bookCount").textContent = currentBooks.length;
+            renderLoanList("dashboardLoans", currentBooks);
+        }
+
+        function renderPatronSummary() {
+            const summary = document.getElementById("patronSummary");
+
+            if (mode !== "issue" || !currentUser) {
+                summary.classList.remove("show");
+                return;
+            }
+
+            document.getElementById("patronWelcome").textContent = `Welcome ${currentUser.name}`;
+            document.getElementById("patronSummaryCardId").textContent = currentUser.koha_id;
+            document.getElementById("patronSummaryBookCount").textContent = currentBooks.length;
+            summary.classList.add("show");
+        }
+
+        function renderLoanList(containerId, books, markedIds = new Set()) {
+            const container = document.getElementById(containerId);
+
+            if (!books.length) {
+                container.innerHTML = `<div class="empty-state">No active books found.</div>`;
+                return;
+            }
+
+            container.innerHTML = books.map(book => {
+                const marked = markedIds.has(book.id) ? " marked" : "";
+                return `
+                    <div class="book${marked}" data-book-id="${book.id}">
+                        <div>
+                            <strong>${book.title}</strong>
+                            <span>${book.id}</span>
+                        </div>
+                        <div class="tag">${marked ? "RETURN" : "ACTIVE"}</div>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        function goToScan(nextMode) {
+            mode = nextMode;
+            scannedTags = new Set();
+            operationTags = new Set();
+            validBooks = [];
+            invalidBooks = [];
+
+            clearAlert("scanAlert");
+            stopScan();
+            document.getElementById("manual_tag").value = "";
+            document.getElementById("book_list").innerHTML = `<div class="empty-state">No books detected yet.</div>`;
+            document.getElementById("scanTitle").textContent =
+                mode === "issue" ? "Issue books" : "Return books";
+            document.getElementById("returnPanel").style.display = "none";
+            renderLoanList("returnLoans", currentBooks);
+            renderPatronSummary();
+            updateScanValidation();
+
+            showScreen("scan");
+        }
+
+        async function cancelFlow() {
+            if (mode === "issue" && sessionId) {
+                await endSession();
+                return;
+            }
+
+            resetKiosk();
+        }
+
+        function startAutoScan() {
+            if (scanInterval) {
+                return;
+            }
+
+            scanOneRandomTag();
+            scanInterval = setInterval(scanOneRandomTag, 1200);
+        }
+
+        function stopScan() {
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
+            }
+        }
+
+        function scanOneRandomTag() {
+            const tag = fakeTags[Math.floor(Math.random() * fakeTags.length)];
+            scanTag(tag);
+        }
+
+        function scanManualTag() {
+            const input = document.getElementById("manual_tag");
+            const tag = input.value.trim();
+
+            if (!tag) {
+                showAlert("scanAlert", "Enter a tag before adding it.", "warning");
+                return;
+            }
+
+            input.value = "";
+            scanTag(tag);
+        }
+
+        async function handleBookScan(uid) {
+            if (!isScreenActive("scan") || !mode) {
+                return;
+            }
+
+            await scanTag(uid);
+        }
+
+        async function scanTag(tag) {
+            if (scannedTags.has(tag)) {
+                showAlert("scanAlert", `${tag} was already scanned in this operation.`, "warning");
+                return;
+            }
+
+            scannedTags.add(tag);
+            clearAlert("scanAlert");
+            playBeep();
+
+            try {
+                const book = await request(`/book/${tag}`);
+
+                operationTags.add(tag);
+                validBooks.push({ tag, book });
+                renderScannedBook(book, tag, mode === "return" ? "marked" : "", "Ready", false);
+                renderReturnHighlights();
+                updateScanValidation();
+            } catch (error) {
+                const book = { id: tag, title: "Unknown book tag" };
+                invalidBooks.push({
+                    tag,
+                    book,
+                    message: "Unknown RFID book tag."
+                });
+                renderScannedBook(book, tag, "error", "Blocked", true);
+                updateScanValidation();
+            }
+        }
+
+        function renderScannedBook(book, tag, stateClass, label, isInvalid) {
+            const container = document.getElementById("book_list");
+
+            if (container.querySelector(".empty-state")) {
+                container.innerHTML = "";
+            }
+
+            const div = document.createElement("div");
+            div.className = `book ${stateClass}`.trim();
+            div.dataset.tag = tag;
+            const safeTitle = escapeHtml(book.title);
+            const safeId = escapeHtml(book.id);
+            const safeTag = escapeHtml(tag);
+            const safeLabel = escapeHtml(label);
+            div.innerHTML = `
+                <div class="book-body">
+                    <strong>${isInvalid ? "! " : ""}${safeTitle}</strong>
+                    <span>${safeId} · ${safeTag}</span>
+                </div>
+                <div class="book-actions">
+                    <div class="tag ${isInvalid ? "blocked" : ""}">${safeLabel}</div>
+                    ${isInvalid ? `<button class="remove-scan" onclick="removeInvalidScan(this.closest('.book').dataset.tag)">Remove</button>` : ""}
+                </div>
+            `;
+            container.appendChild(div);
+        }
+
+        function renderReturnHighlights() {
+            if (mode !== "return") {
+                return;
+            }
+
+            const returnedIds = new Set(validBooks.map(item => item.book.id));
+            renderLoanList("returnLoans", currentBooks, returnedIds);
+        }
+
+        function removeInvalidScan(tag) {
+            const card = document.querySelector(`#book_list .book[data-tag="${CSS.escape(tag)}"]`);
+
+            scannedTags.delete(tag);
+            operationTags.delete(tag);
+            invalidBooks = invalidBooks.filter(item => item.tag !== tag);
+
+            if (!card) {
+                refreshScanListAfterRemoval();
+                return;
+            }
+
+            card.classList.add("removing");
+
+            setTimeout(() => {
+                card.remove();
+                refreshScanListAfterRemoval();
+            }, 170);
+        }
+
+        function refreshScanListAfterRemoval() {
+            const container = document.getElementById("book_list");
+
+            if (!container.querySelector(".book")) {
+                container.innerHTML = `<div class="empty-state">No books detected yet.</div>`;
+            }
+
+            renderReturnHighlights();
+            updateScanValidation();
+        }
+
+        function updateScanValidation() {
+            const confirmButton = document.getElementById("confirmBtn");
+
+            if (!validBooks.length && invalidBooks.length) {
+                confirmButton.disabled = true;
+                showAlert("scanAlert", "No valid books scanned. Remove invalid scans or scan another book.", "error");
+                return;
+            }
+
+            if (invalidBooks.length) {
+                confirmButton.disabled = true;
+                showAlert("scanAlert", "Resolve invalid scans before confirming.", "error");
+                return;
+            }
+
+            if (!validBooks.length) {
+                confirmButton.disabled = true;
+                clearAlert("scanAlert");
+                return;
+            }
+
+            confirmButton.disabled = false;
+            clearAlert("scanAlert");
+        }
+
+        async function confirmAction() {
+            clearAlert("scanAlert");
+            stopScan();
+
+            if (invalidBooks.length) {
+                showAlert("scanAlert", "Resolve invalid scans before confirming.", "error");
+                updateScanValidation();
+                return;
+            }
+
+            const tags = Array.from(operationTags);
+
+            if (!tags.length) {
+                showAlert("scanAlert", "No valid books scanned.", "warning");
+                updateScanValidation();
+                return;
+            }
+
+            try {
+                if (mode === "issue") {
+                    await request("/books", {
+                        method: "POST",
+                        body: JSON.stringify({ session_id: sessionId, tags })
+                    });
+
+                    await request("/confirm", {
+                        method: "POST",
+                        body: JSON.stringify({ session_id: sessionId })
+                    });
+
+                    document.getElementById("successMsg").textContent =
+                        `${tags.length} book${tags.length === 1 ? "" : "s"} issued successfully.`;
+                } else {
+                    await request("/return", {
+                        method: "POST",
+                        body: JSON.stringify({ tags })
+                    });
+
+                    document.getElementById("successMsg").textContent =
+                        `${tags.length} book${tags.length === 1 ? "" : "s"} returned successfully.`;
+                }
+
+                sessionId = null;
+                showScreen("success");
+                setTimeout(resetKiosk, 2600);
+            } catch (error) {
+                showAlert("scanAlert", error.message || "Transaction failed.", "error");
+            }
+        }
+
+        function startScannerPolling() {
+            if (scannerPollTimer) {
+                return;
+            }
+
+            scannerPollTimer = setInterval(pollLatestScannerScan, 450);
+        }
+
+        function stopScannerPolling() {
+            if (!scannerPollTimer) {
+                return;
+            }
+
+            clearInterval(scannerPollTimer);
+            scannerPollTimer = null;
+            scannerRequestInFlight = false;
+        }
+
+        async function pollLatestScannerScan() {
+            if (scannerRequestInFlight) {
+                return;
+            }
+
+            if (!isScreenActive("userScan")) {
+                return;
+            }
+
+            scannerRequestInFlight = true;
+
+            try {
+                const data = await request("/api/rfid/latest");
+                const uid = data.uid || data.data?.uid;
+
+                if (!uid) {
+                    return;
+                }
+
+                if (isScreenActive("userScan")) {
+                    await handlePatronScan(uid);
+                }
+            } catch (error) {
+                console.warn("Scanner polling skipped:", error.message);
+            } finally {
+                scannerRequestInFlight = false;
+            }
+        }
+
+        function playBeep() {
+            const beep = document.getElementById("beep");
+            beep.currentTime = 0;
+            beep.play().catch(() => {});
+        }
+
+        async function endSession() {
+            const activeSession = sessionId;
+
+            if (activeSession) {
+                try {
+                    await request(`/sessions/${activeSession}`, { method: "DELETE" });
+                } catch (error) {
+                    console.warn("Session cleanup skipped:", error.message);
+                }
+            }
+
+            resetKiosk();
+        }
+
+        function resetKiosk() {
+            stopScan();
+            stopScannerPolling();
+            sessionId = null;
+            currentUser = null;
+            currentUserUid = null;
+            currentBooks = [];
+            mode = null;
+            scannedTags = new Set();
+            operationTags = new Set();
+            validBooks = [];
+            invalidBooks = [];
+            rfidLoginInProgress = false;
+
+            document.getElementById("user_uid").value = "";
+            document.getElementById("manual_tag").value = "";
+            document.getElementById("book_list").innerHTML = "";
+            document.getElementById("patronSummary").classList.remove("show");
+            clearAlert("idleAlert");
+            clearAlert("userAlert");
+            clearAlert("scanAlert");
+            showScreen("idle");
+        }
+
+        document.getElementById("user_uid").addEventListener("keydown", event => {
+            if (event.key === "Enter") {
+                startSession();
+            }
+        });
+
+        document.getElementById("manual_tag").addEventListener("keydown", event => {
+            if (event.key === "Enter") {
+                scanManualTag();
+            }
+        });
+
+        showScreen("idle");
+    </script>
+</body>
+</html>
