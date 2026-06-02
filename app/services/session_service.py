@@ -72,11 +72,13 @@ def _apply_transaction(active_books, transaction):
 
 
 def _delete_user_sessions(db, user_koha_id):
-    (
-        db.query(SessionDB)
-        .filter(SessionDB.user["koha_id"].as_string() == user_koha_id)
-        .delete(synchronize_session=False)
-    )
+    sessions = db.query(SessionDB).all()
+
+    for session in sessions:
+        user = session.user or {}
+
+        if user.get("koha_id") == user_koha_id:
+            db.delete(session)
 
 
 def end_session(session_id):
@@ -109,13 +111,17 @@ def get_current_books(user_koha_id):
         active_books = {}
 
         for transaction in transactions:
-            if transaction.type == "issue":
-                transaction_user = transaction.user or {}
+            transaction_user = transaction.user or {}
 
+            if transaction.type == "issue":
                 if transaction_user.get("koha_id") != user_koha_id:
                     continue
 
-            _apply_transaction(active_books, transaction)
+                _apply_transaction(active_books, transaction)
+                continue
+
+            if transaction.type == "return":
+                _apply_transaction(active_books, transaction)
 
         return list(active_books.values())
 
@@ -217,25 +223,26 @@ def confirm_session(session_id, adapter):
             logger.warning(f"Session not found: {session_id}")
             return None
 
-        books = session.books or []
+        books = list(session.books or [])
+        user = dict(session.user or {})
 
         if not books:
             raise EmptyScanError()
 
         book_ids = [book["id"] for book in books]
 
-        adapter.issue_books(session.user["koha_id"], book_ids)
+        adapter.issue_books(user["koha_id"], book_ids)
 
         transaction = Transaction(
             id=str(uuid.uuid4()),
-            user=session.user,
+            user=user,
             books=books,
             type="issue"
         )
 
         result = {
             "id": session.id,
-            "user": session.user,
+            "user": user,
             "books": books
         }
 

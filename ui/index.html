@@ -659,6 +659,7 @@
         let scannerPollTimer = null;
         let scannerRequestInFlight = false;
         let rfidLoginInProgress = false;
+        let lastProcessedScanKey = null;
 
         function showScreen(id) {
             document.querySelectorAll(".screen").forEach(screen => {
@@ -729,7 +730,7 @@
 
                 await refreshCurrentBooks();
                 stopScannerPolling();
-                goToScan("issue");
+                openDashboard();
             } catch (error) {
                 showAlert("userAlert", error.message || "User not found.", "error");
                 input.value = "";
@@ -757,7 +758,7 @@
 
                 await refreshCurrentBooks();
                 stopScannerPolling();
-                goToScan("issue");
+                openDashboard();
             } catch (error) {
                 showAlert("userAlert", error.message || "RFID card not registered", "error");
             } finally {
@@ -797,8 +798,18 @@
         }
 
         async function refreshCurrentBooks() {
+            if (!currentUser) {
+                currentBooks = [];
+                return;
+            }
+
             const data = await request(`/users/${currentUser.koha_id}/current-books`);
             currentBooks = data.data.books || [];
+        }
+
+        function openDashboard() {
+            renderDashboard();
+            showScreen("dashboard");
         }
 
         function renderDashboard() {
@@ -857,12 +868,14 @@
             document.getElementById("book_list").innerHTML = `<div class="empty-state">No books detected yet.</div>`;
             document.getElementById("scanTitle").textContent =
                 mode === "issue" ? "Issue books" : "Return books";
-            document.getElementById("returnPanel").style.display = "none";
+            document.getElementById("returnPanel").style.display =
+                mode === "return" && currentBooks.length ? "block" : "none";
             renderLoanList("returnLoans", currentBooks);
             renderPatronSummary();
             updateScanValidation();
 
             showScreen("scan");
+            startScannerPolling();
         }
 
         async function cancelFlow() {
@@ -1041,10 +1054,12 @@
         async function confirmAction() {
             clearAlert("scanAlert");
             stopScan();
+            stopScannerPolling();
 
             if (invalidBooks.length) {
                 showAlert("scanAlert", "Resolve invalid scans before confirming.", "error");
                 updateScanValidation();
+                startScannerPolling();
                 return;
             }
 
@@ -1053,6 +1068,7 @@
             if (!tags.length) {
                 showAlert("scanAlert", "No valid books scanned.", "warning");
                 updateScanValidation();
+                startScannerPolling();
                 return;
             }
 
@@ -1085,6 +1101,7 @@
                 setTimeout(resetKiosk, 2600);
             } catch (error) {
                 showAlert("scanAlert", error.message || "Transaction failed.", "error");
+                startScannerPolling();
             }
         }
 
@@ -1111,7 +1128,7 @@
                 return;
             }
 
-            if (!isScreenActive("userScan")) {
+            if (!isScreenActive("userScan") && !isScreenActive("scan")) {
                 return;
             }
 
@@ -1120,13 +1137,23 @@
             try {
                 const data = await request("/api/rfid/latest");
                 const uid = data.uid || data.data?.uid;
+                const timestamp = data.timestamp || data.data?.timestamp || "";
+                const scanKey = `${uid || ""}:${timestamp}`;
 
                 if (!uid) {
                     return;
                 }
 
+                if (scanKey === lastProcessedScanKey) {
+                    return;
+                }
+
+                lastProcessedScanKey = scanKey;
+
                 if (isScreenActive("userScan")) {
                     await handlePatronScan(uid);
+                } else if (isScreenActive("scan")) {
+                    await handleBookScan(uid);
                 }
             } catch (error) {
                 console.warn("Scanner polling skipped:", error.message);
@@ -1168,6 +1195,7 @@
             validBooks = [];
             invalidBooks = [];
             rfidLoginInProgress = false;
+            lastProcessedScanKey = null;
 
             document.getElementById("user_uid").value = "";
             document.getElementById("manual_tag").value = "";

@@ -23,6 +23,10 @@ class ESP32SerialRFIDReader(RFIDReader):
         self.timeout = timeout
         self.reconnect_delay = reconnect_delay
         self.uid_pattern = re.compile(uid_pattern)
+        self.uid_line_pattern = re.compile(
+            r"^(?:UID|RFID|CARD UID|CARD|TAG)\s*[:=-]\s*([0-9A-F]{8,32})$",
+            re.IGNORECASE,
+        )
         self.serial_factory = serial_factory or self._load_serial_factory()
         self.serial_connection = None
         self.active_port = None
@@ -95,11 +99,16 @@ class ESP32SerialRFIDReader(RFIDReader):
 
         # ESP32 boot/debug lines such as "rst:0x1" or "SPI_FAST_FLASH_BOOT"
         # are intentionally ignored here. Only clean RFID UID payloads pass.
-        if not self.uid_pattern.fullmatch(value):
-            logger.debug("Ignoring non-RFID serial line: %r", value)
-            return None
+        if self.uid_pattern.fullmatch(value):
+            return value
 
-        return value
+        labelled_uid = self.uid_line_pattern.fullmatch(value)
+
+        if labelled_uid:
+            return labelled_uid.group(1).upper()
+
+        logger.debug("Ignoring non-RFID serial line: %r", value)
+        return None
 
     def read_uid(self):
         if not self._connect():

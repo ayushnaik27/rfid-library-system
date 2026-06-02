@@ -26,22 +26,52 @@ def _student_to_user(student):
     }
 
 
-def _mapping_to_user(db, mapping):
+def _ensure_student_for_mapping(db, mapping):
     if not mapping:
         return None
 
     student = db.query(Student).filter(Student.id == mapping.user_id).first()
+
+    if not student:
+        student = Student(
+            id=mapping.user_id,
+            name=mapping.user_name or mapping.user_id,
+            koha_id=mapping.user_id,
+        )
+        db.add(student)
+        db.commit()
+        db.refresh(student)
+        logger.info("[DB] Created missing user row for RFID mapping: %s", mapping.user_id)
+    else:
+        changed = False
+
+        if not student.koha_id:
+            student.koha_id = mapping.user_id
+            changed = True
+
+        if mapping.user_name and student.name != mapping.user_name:
+            student.name = mapping.user_name
+            changed = True
+
+        if changed:
+            db.commit()
+            db.refresh(student)
+
+    return student
+
+
+def _mapping_to_user(db, mapping):
+    if not mapping:
+        return None
+
+    student = _ensure_student_for_mapping(db, mapping)
     user = _student_to_user(student)
 
     if user:
         return user
 
-    logger.warning("[RFID] Mapping found but user row missing: %s", mapping.user_id)
-    return {
-        "name": mapping.user_name,
-        "koha_id": mapping.user_id,
-        "roll_number": None,
-    }
+    logger.warning("[RFID] Mapping found but user could not be resolved: %s", mapping.user_id)
+    return None
 
 
 def map_uid_to_user(rfid_uid):
@@ -101,6 +131,18 @@ def create_mapping(rfid_uid, user_id, user_name=None):
         else:
             mapping.user_id = user_id
             mapping.user_name = user_name or mapping.user_name or user_id
+
+        student = db.query(Student).filter(Student.id == user_id).first()
+
+        if not student:
+            db.add(Student(
+                id=user_id,
+                name=user_name or user_id,
+                koha_id=user_id,
+            ))
+        else:
+            student.name = user_name or student.name
+            student.koha_id = student.koha_id or user_id
 
         db.commit()
 
