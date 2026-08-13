@@ -149,3 +149,34 @@ if RFID_MODE == "hardware":
 
 else:
     print("[RFID] Mock mode enabled")
+
+
+# =========================================================
+# KOHA API CONFIGURATION
+# =========================================================
+
+KOHA_BASE_URL = os.getenv(
+    "KOHA_BASE_URL",
+    ""
+)
+
+KOHA_CLIENT_ID = os.getenv(
+    "KOHA_CLIENT_ID",
+    ""
+)
+
+KOHA_CLIENT_SECRET = os.getenv(
+    "KOHA_CLIENT_SECRET",
+    ""
+)
+
+KOHA_TIMEOUT_SECONDS = float(
+    os.getenv(
+        "KOHA_TIMEOUT_SECONDS",
+        "10"
+    )
+)
+
+print(
+    f"[KOHA] Base URL configured: {bool(KOHA_BASE_URL)}"
+)
