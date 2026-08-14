@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import logging
 
 from app.adapters.koha_mock import KohaMockAdapter
+from app.adapters.koha_rest import KohaRestAdapter
 from app.schemas.session_schema import SessionResponse
 from app.services.rfid_mapping_service import map_uid_to_user
 from app.services.rfid_service import get_book_from_tag
@@ -21,7 +22,7 @@ from app.services.session_service import (
 from app.utils.response import success_response
 
 router = APIRouter()
-adapter = KohaMockAdapter()
+adapter = KohaRestAdapter()
 logger = logging.getLogger(__name__)
 
 

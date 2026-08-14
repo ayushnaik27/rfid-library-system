@@ -216,22 +216,122 @@ def add_books(session_id, tags):
 
 def confirm_session(session_id, adapter):
     db = SessionLocal()
+
     try:
-        session = db.query(SessionDB).filter(SessionDB.id == session_id).first()
+        # -----------------------------------------------------
+        # FIND SESSION
+        # -----------------------------------------------------
+
+        session = (
+            db.query(SessionDB)
+            .filter(SessionDB.id == session_id)
+            .first()
+        )
 
         if not session:
-            logger.warning(f"Session not found: {session_id}")
+            logger.warning(
+                f"Session not found: {session_id}"
+            )
             return None
+
+        # -----------------------------------------------------
+        # COPY SESSION DATA
+        # -----------------------------------------------------
 
         books = list(session.books or [])
         user = dict(session.user or {})
 
+        # -----------------------------------------------------
+        # VALIDATE SESSION
+        # -----------------------------------------------------
+
         if not books:
             raise EmptyScanError()
 
-        book_ids = [book["id"] for book in books]
+        if not user.get("koha_id"):
+            raise SessionServiceError(
+                "User does not have a KOHA ID"
+            )
 
-        adapter.issue_books(user["koha_id"], book_ids)
+        # -----------------------------------------------------
+        # LOCAL BOOK IDS
+        # -----------------------------------------------------
+
+        book_ids = [
+            book["id"]
+            for book in books
+            if book.get("id")
+        ]
+
+        if len(book_ids) != len(books):
+            raise SessionServiceError(
+                "One or more books have no local ID"
+            )
+
+        logger.info(
+            f"[KOHA] Attempting checkout for user "
+            f"{user['koha_id']} "
+            f"with books {book_ids}"
+        )
+
+        # -----------------------------------------------------
+        # ISSUE BOOKS THROUGH ADAPTER
+        #
+        # KohaRestAdapter performs:
+        #
+        # local book
+        #     ↓
+        # accession_number
+        #     ↓
+        # KOHA external_id
+        #     ↓
+        # KOHA item_id
+        #     ↓
+        # availability
+        #     ↓
+        # checkout
+        # -----------------------------------------------------
+
+        koha_result = adapter.issue_books(
+            user["koha_id"],
+            book_ids,
+        )
+
+        if not koha_result:
+            raise SessionServiceError(
+                "KOHA checkout returned no result"
+            )
+
+        successful = koha_result.get(
+            "successful",
+            []
+        )
+
+        failed = koha_result.get(
+            "failed",
+            []
+        )
+
+        # -----------------------------------------------------
+        # VERIFY COMPLETE CHECKOUT
+        # -----------------------------------------------------
+
+        if failed:
+            raise SessionServiceError(
+                "One or more books failed to checkout in KOHA"
+            )
+
+        if len(successful) != len(book_ids):
+            raise SessionServiceError(
+                "KOHA did not confirm checkout for "
+                "all scanned books"
+            )
+
+        # -----------------------------------------------------
+        # KOHA SUCCESSFUL
+        #
+        # Only now create the local transaction.
+        # -----------------------------------------------------
 
         transaction = Transaction(
             id=str(uuid.uuid4()),
@@ -240,17 +340,36 @@ def confirm_session(session_id, adapter):
             type="issue"
         )
 
+        db.add(transaction)
+
+        # -----------------------------------------------------
+        # REMOVE ACTIVE SESSION
+        # -----------------------------------------------------
+
         result = {
             "id": session.id,
             "user": user,
             "books": books
         }
 
-        db.add(transaction)
         db.delete(session)
+
+        # -----------------------------------------------------
+        # COMMIT LOCAL STATE
+        # -----------------------------------------------------
+
         db.commit()
 
-        logger.info(f"Issue transaction saved for session {session_id}")
+        logger.info(
+            f"[KOHA] Issue transaction saved "
+            f"for session {session_id}"
+        )
+
+        logger.info(
+            f"[KOHA] Successfully issued "
+            f"{len(successful)} book(s) "
+            f"to patron {user['koha_id']}"
+        )
 
         return result
 
